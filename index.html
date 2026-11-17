@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#14181c">
+<title>BarnSense</title>
+<style>
+  :root{
+    --bg:#14181c; --card:#1d2329; --line:#2c343c; --text:#eef1f3; --dim:#97a3ad;
+    --temp:#ff8a3d; --rh:#3db4ff; --ok:#3ecf8e; --bad:#ff5a5f; --warn:#ffc53d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px}
+  h1{font-size:22px;margin:0;letter-spacing:.3px}
+  h1 span{color:var(--temp)}
+  .wrap{padding:0 12px 120px;max-width:640px;margin:0 auto}
+  button{font:inherit;border:0;border-radius:12px;padding:12px 16px;background:var(--line);color:var(--text);cursor:pointer}
+  button.primary{background:var(--temp);color:#1a1006;font-weight:600}
+  button.ghost{background:transparent;color:var(--dim);padding:8px 10px}
+  button:disabled{opacity:.5}
+  .bar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--bg) 30%);display:flex;gap:10px;justify-content:center}
+  .bar button{flex:1;max-width:300px;padding:15px}
+  .card{background:var(--card);border-radius:16px;padding:14px 16px;margin:10px 0;border:1px solid var(--line)}
+  .sensor{display:grid;grid-template-columns:1fr auto;gap:4px 10px;cursor:pointer}
+  .sensor .name{font-weight:600;font-size:17px}
+  .sensor .meta{color:var(--dim);font-size:13px}
+  .big{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
+  .t{color:var(--temp)} .h{color:var(--rh)}
+  .vals{display:flex;gap:18px;align-items:baseline}
+  .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--line);color:var(--dim)}
+  .pill.bad{background:rgba(255,90,95,.18);color:var(--bad)}
+  .pill.ok{background:rgba(62,207,142,.15);color:var(--ok)}
+  .pill.warn{background:rgba(255,197,61,.15);color:var(--warn)}
+  .empty{text-align:center;color:var(--dim);padding:40px 20px}
+  .notice{background:rgba(255,197,61,.1);border:1px solid rgba(255,197,61,.35);color:#ffe2a0;border-radius:12px;padding:12px 14px;font-size:14px;margin:10px 0}
+  .notice a{color:#ffd166}
+  .tabs{display:flex;gap:6px;margin:8px 0}
+  .tabs button{flex:1;padding:8px;font-size:14px}
+  .tabs button.on{background:var(--text);color:var(--bg)}
+  canvas{width:100%;height:240px;display:block}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:13px;color:var(--dim)}
+  .stats b{display:block;font-size:17px;color:var(--text);font-variant-numeric:tabular-nums}
+  label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
+  input,select{font:inherit;width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translateX(-50%);background:#000c;padding:10px 16px;border-radius:12px;font-size:14px;z-index:9;max-width:90%;display:none}
+  .back{font-size:15px}
+  .live{animation:pulse 1.6s infinite}
+  @keyframes pulse{50%{opacity:.45}}
+  .modal{position:fixed;inset:0;background:#000a;display:none;align-items:flex-end;z-index:8}
+  .modal .sheet{background:var(--card);width:100%;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:85vh;overflow:auto}
+  #banner{position:sticky;top:0;z-index:6;padding-top:env(safe-area-inset-top)}
+  #banner:empty{display:none}
+  .alertrow{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start;padding:9px 12px;font-size:14px;border-bottom:1px solid #0004}
+  .alertrow.critical{background:#5a1416;color:#ffd9da}
+  .alertrow.watch{background:#4a3a0c;color:#ffe9b0}
+  .alertrow .src{font-size:12px;opacity:.75}
+  .alertrow button{background:transparent;color:inherit;padding:0 4px;font-size:18px;line-height:1}
+  .menu{position:fixed;inset:0;background:#0008;display:none;z-index:7}
+  .menu.open{display:block}
+  .menupanel{position:absolute;top:0;left:0;bottom:0;width:min(78vw,300px);background:var(--card);border-right:1px solid var(--line);padding:calc(16px + env(safe-area-inset-top)) 10px 16px;display:flex;flex-direction:column;gap:4px}
+  .menupanel button{text-align:left;background:transparent;padding:14px 12px;font-size:17px;border-radius:10px}
+  .menupanel button:active{background:var(--line)}
+  .task{display:grid;grid-template-columns:28px 1fr;gap:8px;align-items:start;padding:9px 0;border-top:1px solid var(--line)}
+  .task:first-child{border-top:0}
+  .task input[type=checkbox]{width:22px;height:22px;margin:2px 0 0;accent-color:var(--ok)}
+  .task .when{font-size:12px;color:var(--dim)}
+  .task.done .txt{color:var(--dim);text-decoration:line-through}
+  .task.late .when{color:var(--warn)}
+  .farmhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .daynum{font-size:28px;font-weight:700;color:var(--temp);font-variant-numeric:tabular-nums}
+  details summary{cursor:pointer;color:var(--dim);font-size:14px;margin-top:10px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .chips label{display:flex;gap:4px;align-items:center;margin:0;color:var(--text);font-size:14px}
+  .chips input{width:auto}
+  textarea{width:100%;height:160px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px;font:12px ui-monospace,monospace;padding:8px}
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<div id="banner"></div>
+
+<!-- LIST VIEW -->
+<section id="listView">
+  <header style="justify-content:flex-start;gap:6px">
+    <button class="ghost" id="menuBtn" aria-label="Menu" style="font-size:24px;line-height:1;padding:4px 10px 6px">☰</button>
+    <h1>Barn<span>Sense</span></h1>
+  </header>
+  <div class="menu" id="menu">
+    <div class="menupanel">
+      <button id="menuHome">🏠 Home</button>
+      <button id="flockBtn">✅ Tasks</button>
+      <button id="linkBtn">🎛 Controller</button>
+      <button id="notesBtn">📝 Notes</button>
+      <button id="settingsBtn">⚙️ Settings</button>
+    </div>
+  </div>
+  <div class="wrap">
+    <div id="btNotice"></div>
+    <div id="driveNotice"></div>
+    <div id="flockToday"></div>
+    <div id="alerts"></div>
+    <div id="list"></div>
+  </div>
+  <div class="bar">
+    <button class="primary" id="syncBtn">Sync a sensor</button>
+    <button id="noteQuickBtn">📝 Add note</button>
+  </div>
+</section>
+
+<!-- NOTES VIEW -->
+<section id="notesView" style="display:none">
+  <header>
+    <button class="ghost back" id="notesBackBtn">‹ Home</button>
+    <span class="pill">Notes</span>
+  </header>
+  <div class="wrap">
+    <div class="card">
+      <div style="font-weight:600">What did you do or change today?</div>
+      <div class="row">
+        <div><label>Farm</label><select id="nFarm"><option value="">All farms</option><option value="CC">CC</option><option value="GB">GB</option><option value="DS">DS</option></select></div>
+        <div><label>House(s)</label><input id="nHouse" placeholder="e.g. 2 or 1,3" inputmode="numeric"></div>
+      </div>
+      <label>Note</label>
+      <textarea id="nText" style="height:140px;font:16px/1.4 -apple-system,BlinkMacSystemFont,sans-serif" placeholder="e.g. Raised static to 0.12 in houses 1–2, birds huddling at the tunnel end"></textarea>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <button id="nMic" style="flex:1">🎤 Talk</button>
+        <button class="primary" id="nSave" style="flex:1">Save note</button>
+      </div>
+      <div id="nMicHint" class="meta" style="color:var(--dim);font-size:13px;margin-top:6px"></div>
+    </div>
+    <div id="notesList"></div>
+  </div>
+</section>
+
+<!-- SETTINGS VIEW -->
+<section id="settingsView" style="display:none">
+  <header>
+    <button class="ghost back" id="settingsBackBtn">‹ Home</button>
+    <span class="pill">Settings</span>
+  </header>
+  <div class="wrap">
+    <div class="card">
+      <div style="font-weight:600">Temperature</div>
+      <div class="tabs" id="unitTabs"><button data-u="F">°F</button><button data-u="C">°C</button></div>
+    </div>
+    <div class="card">
+      <div style="font-weight:600">Sensors</div>
+      <div id="setSensors" style="margin-top:6px;font-size:15px"></div>
+      <button class="primary" id="addSensorBtn" style="width:100%;margin-top:10px">+ Add a sensor</button>
+      <div class="meta" style="color:var(--dim);font-size:13px;margin-top:6px">Stand next to the new sensor, tap Add, and pick it from the list.</div>
+    </div>
+    <div class="card">
+      <div style="font-weight:600">Controller boards</div>
+      <div id="setBoards" style="margin-top:6px;font-size:15px"></div>
+      <button class="primary" id="addBoardBtn" style="width:100%;margin-top:10px">+ Add a board</button>
+      <div class="meta" style="color:var(--dim);font-size:13px;margin-top:6px">Stand at the controller with the board powered, tap Add, and pick it from the list.</div>
+    </div>
+    <div class="card">
+      <div style="font-weight:600">Google Drive</div>
+      <div class="meta" style="color:var(--dim);font-size:13px">Saves every sensor sync and controller file to your Drive for Claude to read.</div>
+      <button id="driveBtn" style="width:100%;margin-top:10px">☁ Drive</button>
+    </div>
+  </div>
+</section>
+
+<!-- FLOCK REMINDERS VIEW -->
+<section id="flockView" style="display:none">
+  <header>
+    <button class="ghost back" id="flockBackBtn">‹ Home</button>
+    <span class="pill">Day 0 = placement</span>
+  </header>
+  <div class="wrap">
+    <div id="flockFarms"></div>
+    <div class="card">
+      <div style="font-weight:600">Reminders on your phone</div>
+      <div class="meta" style="color:var(--dim);font-size:13px">This app can't wake your phone when it's closed. Tap <b>Add to calendar</b> under a farm after you set its placement date: every task goes on your phone calendar at 6 AM on the right day, with an alert.</div>
+      <button id="notifBtn" style="width:100%;margin-top:10px">Also show a notice when I open the app</button>
+    </div>
+    <div class="card">
+      <div style="font-weight:600">Task list</div>
+      <div class="meta" style="color:var(--dim);font-size:13px">Starting points from your program. Change or add tasks to fit each flock.</div>
+      <button id="editTasksBtn" style="width:100%;margin-top:10px">Edit tasks</button>
+    </div>
+  </div>
+</section>
+
+<!-- CONTROLLER LINK VIEW -->
+<section id="linkView" style="display:none">
+  <header>
+    <button class="ghost back" id="linkBackBtn">‹ Home</button>
+    <span id="linkTag" class="pill" style="display:none">● CONNECTED</span>
+  </header>
+  <div class="wrap">
+    <div class="card">
+      <div style="font-weight:700;font-size:20px">Controller</div>
+      <div class="meta" style="color:var(--dim);font-size:14px">Save History on the controller (as if to a USB stick), then tap <b>Connect</b> and download it here.</div>
+      <div id="linkStatus" style="margin-top:10px;font-size:15px">Not connected.</div>
+    </div>
+    <div class="card" id="filesCard" style="display:none">
+      <div style="font-weight:600">Files from the controller</div>
+      <div id="filesUsb" style="margin-top:8px;font-size:14px"></div>
+      <div id="filesList" style="margin-top:8px;font-size:15px">Not loaded.</div>
+      <button id="filesRefresh" style="width:100%;margin-top:10px">Refresh list</button>
+    </div>
+    <details class="card"><summary style="margin:0">Setup and testing (not needed day to day)</summary>
+    <div class="card">
+      <div style="font-weight:600">House label</div>
+      <div class="meta" style="color:var(--dim);font-size:13px">Set once per board so its files are named for the house.</div>
+      <div class="row" style="margin-top:6px">
+        <div><label>House label (e.g. GB H2)</label><input id="labelIn" maxlength="12" placeholder="GB H2"></div>
+      </div>
+      <button class="ghost" id="labelSet" style="width:100%;margin-top:6px">Set label (shows after the board restarts)</button>
+    </div>
+    <div class="card">
+      <div style="font-weight:600">Saved capture on this phone</div>
+      <div id="capInfo" class="meta" style="color:var(--dim);font-size:14px;margin-top:4px">None yet.</div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button id="capExportBtn" style="flex:1">Export hex dump</button>
+      </div>
+    </div>
+    <div class="card" id="scanCard" style="display:none">
+      <div style="font-weight:600">Discovery scan</div>
+      <div class="meta" style="color:var(--dim);font-size:13px">Sends read-only questions to the controller on the PC terminals to learn how it talks. About 3 minutes. Run only with no birds in the house.</div>
+      <div id="scanStatus" style="margin-top:8px;font-size:15px">Not running.</div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="primary" id="scanStartBtn" style="flex:1">Start scan</button>
+        <button id="scanStopBtn" style="flex:1">Stop</button>
+      </div>
+    </div>
+    <div class="card" id="linkCfg" style="display:none">
+      <div style="font-weight:600">Channel speed</div>
+      <div class="meta" style="color:var(--dim);font-size:13px">Leave on Auto unless the capture looks like garbage.</div>
+      <div class="row">
+        <div><label>Channel</label><select id="cfgCh"><option value="0">A – PC terminals</option><option value="1">B – Module comm</option></select></div>
+        <div><label>Speed</label><select id="cfgBaud"><option value="0">Auto</option><option>1200</option><option>2400</option><option>4800</option><option>9600</option><option>14400</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div>
+      </div>
+      <label>Parity</label><select id="cfgPar"><option value="0">None</option><option value="1">Even</option></select>
+      <button id="cfgApply" style="width:100%;margin-top:12px">Apply to board</button>
+      <button class="ghost" id="capClearBtn" style="color:var(--bad);margin-top:8px;width:100%">Clear the board's capture</button>
+    </div>
+    </details>
+  </div>
+  <div class="bar">
+    <button class="primary" id="linkConnBtn">Connect</button>
+  </div>
+</section>
+
+<!-- DETAIL VIEW -->
+<section id="detailView" style="display:none">
+  <header>
+    <button class="ghost back" id="backBtn">‹ Home</button>
+    <span id="liveTag" class="pill" style="display:none">● LIVE</span>
+  </header>
+  <div class="wrap">
+    <div class="card">
+      <div class="name" id="dName" style="font-weight:700;font-size:20px"></div>
+      <div class="meta" id="dMeta" style="color:var(--dim);font-size:13px"></div>
+      <div class="vals" style="margin-top:8px">
+        <div><div class="big t" id="dTemp">–</div><div class="meta">Temperature</div></div>
+        <div><div class="big h" id="dRh">–</div><div class="meta">Humidity</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="tabs" id="rangeTabs">
+        <button data-h="6">6h</button><button data-h="24" class="on">24h</button><button data-h="168">7d</button><button data-h="720">30d</button><button data-h="0">All</button>
+      </div>
+      <canvas id="chart"></canvas>
+      <div class="stats" style="margin-top:10px">
+        <div>Low<b id="sMin">–</b></div><div>Avg<b id="sAvg">–</b></div><div>High<b id="sMax">–</b></div>
+      </div>
+      <div class="stats" style="margin-top:8px">
+        <div>RH low<b id="hMin">–</b></div><div>RH avg<b id="hAvg">–</b></div><div>RH high<b id="hMax">–</b></div>
+      </div>
+    </div>
+
+    <details class="card"><summary style="margin:0">Sensor settings (name, alerts)</summary>
+      <label>Name (e.g. "House 3 – middle")</label>
+      <input id="fName">
+      <div class="row">
+        <div><label id="lTlo">Temp low alert</label><input id="fTlo" type="number" inputmode="decimal"></div>
+        <div><label id="lThi">Temp high alert</label><input id="fThi" type="number" inputmode="decimal"></div>
+      </div>
+      <div class="row">
+        <div><label>RH low alert (%)</label><input id="fHlo" type="number" inputmode="decimal"></div>
+        <div><label>RH high alert (%)</label><input id="fHhi" type="number" inputmode="decimal"></div>
+      </div>
+      <label>Log every</label>
+      <select id="fInt">
+        <option value="60">1 minute (~8 days of memory)</option>
+        <option value="120">2 minutes (~16 days)</option>
+        <option value="300">5 minutes (~41 days)</option>
+        <option value="600">10 minutes (~83 days)</option>
+        <option value="900">15 minutes (~125 days)</option>
+      </select>
+      <div class="meta" style="color:var(--dim);font-size:12px;margin-top:4px">Interval change is sent to the sensor on the next sync.</div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="primary" id="saveBtn" style="flex:1">Save</button>
+        <button id="csvBtn" style="flex:1">Export CSV</button>
+      </div>
+      <button class="ghost" id="delBtn" style="color:var(--bad);margin-top:10px">Remove sensor & its history</button>
+    </details>
+  </div>
+  <div class="bar">
+    <button class="primary" id="dSyncBtn">Sync now</button>
+    <button id="disconnectBtn" style="display:none">Disconnect</button>
+  </div>
+</section>
+
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+
+<script>
+(() => {
+"use strict";
+// ---------- protocol (must match firmware) ----------
+const SVC  = "6e400000-b5a3-f393-e0a9-e50e24dc0001";
+const LIVE = "6e400001-b5a3-f393-e0a9-e50e24dc0001";
+const INFO = "6e400002-b5a3-f393-e0a9-e50e24dc0001";
+const CTRL = "6e400003-b5a3-f393-e0a9-e50e24dc0001";
+const HIST = "6e400004-b5a3-f393-e0a9-e50e24dc0001";
+const MAX_DAYS = 120;               // history kept on the phone per sensor
+
+// ---------- storage ----------
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ toast("Phone storage is full — export & remove old sensors"); return false; } }
+};
+let sensors = store.get("bs.sensors", {});   // id -> meta
+let unitF   = store.get("bs.unitF", true);
+const hist = id => store.get("bs.h." + id, []);    // [[epochSec, c100, rh100], ...]
+const saveHist = (id, arr) => {
+  const cutoff = Date.now()/1000 - MAX_DAYS*86400;
+  let i = 0; while (i < arr.length && arr[i][0] < cutoff) i++;
+  store.set("bs.h." + id, i ? arr.slice(i) : arr);
+};
+const saveSensors = () => store.set("bs.sensors", sensors);
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const cToU = c => unitF ? c*9/5+32 : c;
+const uToC = u => unitF ? (u-32)*5/9 : u;
+const fmtT = c => c == null ? "–" : cToU(c).toFixed(1) + "°";
+const fmtH = h => h == null ? "–" : h.toFixed(0) + "%";
+function ago(sec){
+  if (!sec) return "never";
+  const d = Date.now()/1000 - sec;
+  if (d < 90) return "just now";
+  if (d < 3600) return Math.round(d/60) + " min ago";
+  if (d < 86400*2) return Math.round(d/3600) + " h ago";
+  return Math.round(d/86400) + " days ago";
+}
+function toast(msg, ms=2600){ const t=$("toast"); t.textContent=msg; t.style.display="block"; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display="none", ms); }
+function defaults(id, name){
+  return { id, name: name || id, devName: id, tLo: 15.6, tHi: 32.2, hLo: 40, hHi: 75, interval: 300,
+           pendingInterval: null, bootEpoch: 0, lastSeq: 0, lastSync: 0, live: null, batt: null, battMv: null };
+}
+function alertState(s){
+  if (!s.live) return null;
+  const out = [];
+  if (s.live.c < s.tLo) out.push("cold"); if (s.live.c > s.tHi) out.push("hot");
+  if (s.live.h < s.hLo) out.push("dry");  if (s.live.h > s.hHi) out.push("wet");
+  return out;
+}
+
+// ---------- list view ----------
+function renderList(){
+  const ids = Object.keys(sensors).sort((a,b)=> sensors[a].name.localeCompare(sensors[b].name, undefined, {numeric:true}));
+  const al = [];
+  $("list").innerHTML = ids.length ? "" : `<div class="empty">No sensors yet.<br><br>Stand near a BarnSense sensor and tap <b>Sync a sensor</b>.</div>`;
+  for (const id of ids){
+    const s = sensors[id], a = alertState(s) || [];
+    if (a.length) al.push(`<b>${esc(s.name)}</b>: ${a.join(", ")}`);
+    const stale = s.lastSync && Date.now()/1000 - s.lastSync > 6*3600;
+    const el = document.createElement("div");
+    el.className = "card sensor";
+    el.innerHTML = `
+      <div><div class="name">${esc(s.name)}</div>
+        <div class="meta">Synced ${ago(s.lastSync)} · ${s.batt!=null ? "🔋 "+s.batt+"%" : ""}</div></div>
+      <div>${a.length ? `<span class="pill bad">${a.join(" · ")}</span>` : stale ? `<span class="pill warn">stale</span>` : s.live ? `<span class="pill ok">OK</span>` : ""}</div>
+      <div class="vals"><span class="big t">${fmtT(s.live?.c)}</span><span class="big h">${fmtH(s.live?.h)}</span></div>
+      <div></div>`;
+    el.onclick = () => openDetail(id);
+    $("list").appendChild(el);
+  }
+  renderFlockToday();
+  renderBanner();
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// ---------- detail view ----------
+let curId = null, rangeH = 24;
+function openDetail(id){
+  curId = id; const s = sensors[id];
+  $("listView").style.display = "none"; $("detailView").style.display = "block";
+  $("fName").value = s.name;
+  $("lTlo").textContent = `Temp low alert (${unitF?"°F":"°C"})`; $("lThi").textContent = `Temp high alert (${unitF?"°F":"°C"})`;
+  $("fTlo").value = cToU(s.tLo).toFixed(1); $("fThi").value = cToU(s.tHi).toFixed(1);
+  $("fHlo").value = s.hLo; $("fHhi").value = s.hHi;
+  $("fInt").value = String(s.pendingInterval || s.interval || 300);
+  renderDetail(); window.scrollTo(0,0);
+}
+function renderDetail(){
+  const s = sensors[curId]; if (!s) return;
+  $("dName").textContent = s.name;
+  $("dMeta").textContent = `${s.devName} · synced ${ago(s.lastSync)}` + (s.batt!=null ? ` · battery ${s.batt}% (${(s.battMv/1000).toFixed(2)} V)` : "");
+  $("dTemp").textContent = fmtT(s.live?.c); $("dRh").textContent = fmtH(s.live?.h);
+  drawChart();
+}
+function closeDetail(){ curId = null; $("detailView").style.display="none"; $("listView").style.display="block"; renderList(); }
+
+function drawChart(){
+  const cv = $("chart"), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight; cv.width = W*dpr; cv.height = H*dpr;
+  const g = cv.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,W,H);
+  const s = sensors[curId]; let data = hist(curId);
+  if (rangeH) { const from = Date.now()/1000 - rangeH*3600; data = data.filter(r => r[0] >= from); }
+  const stat = (arr) => arr.length ? [Math.min(...arr), arr.reduce((a,b)=>a+b,0)/arr.length, Math.max(...arr)] : [null,null,null];
+  const ts = data.map(r=>r[1]/100), hs = data.map(r=>r[2]/100);
+  const [tmin,tavg,tmax] = stat(ts), [hmin,havg,hmax] = stat(hs);
+  $("sMin").textContent=fmtT(tmin); $("sAvg").textContent=fmtT(tavg); $("sMax").textContent=fmtT(tmax);
+  $("hMin").textContent=fmtH(hmin); $("hAvg").textContent=fmtH(havg); $("hMax").textContent=fmtH(hmax);
+  g.font = "11px -apple-system,sans-serif"; g.fillStyle = "#97a3ad";
+  if (data.length < 2){ g.textAlign="center"; g.fillText("No history in this range yet — sync the sensor", W/2, H/2); return; }
+  // decimate for speed
+  const step = Math.max(1, Math.floor(data.length / (W*1.5)));
+  const pts = data.filter((_,i)=> i%step===0);
+  const L=34, R=34, T=10, B=22, pw=W-L-R, ph=H-T-B;
+  const t0 = pts[0][0], t1 = pts[pts.length-1][0] || t0+1;
+  let lo = cToU(Math.min(tmin, s.tLo)) - 2, hi = cToU(Math.max(tmax, s.tHi)) + 2;
+  const x = t => L + (t - t0)/(t1 - t0 || 1)*pw;
+  const yT = c => T + (1 - (cToU(c) - lo)/(hi - lo))*ph;
+  const yH = h => T + (1 - h/100)*ph;
+  // grid + axes labels
+  g.strokeStyle = "#2c343c"; g.lineWidth = 1;
+  for (let i=0;i<=4;i++){ const yy = T + i*ph/4; g.beginPath(); g.moveTo(L,yy); g.lineTo(W-R,yy); g.stroke();
+    g.fillStyle="#ff8a3d"; g.textAlign="right"; g.fillText((hi - i*(hi-lo)/4).toFixed(0)+"°", L-4, yy+4);
+    g.fillStyle="#3db4ff"; g.textAlign="left";  g.fillText((100 - i*25)+"%", W-R+4, yy+4); }
+  // time labels
+  g.fillStyle="#97a3ad"; g.textAlign="center";
+  for (let i=0;i<=3;i++){ const tt = t0 + i*(t1-t0)/3; const d = new Date(tt*1000);
+    const lab = (t1-t0) > 2*86400 ? (d.getMonth()+1)+"/"+d.getDate() : d.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
+    g.fillText(lab, x(tt), H-6); }
+  // alert band
+  g.setLineDash([4,4]); g.strokeStyle="rgba(255,90,95,.55)";
+  for (const c of [s.tLo, s.tHi]){ g.beginPath(); g.moveTo(L,yT(c)); g.lineTo(W-R,yT(c)); g.stroke(); }
+  g.setLineDash([]);
+  // lines (break on gaps > 3 intervals)
+  const gap = (s.interval || 300) * 3;
+  const line = (col, yf, idx) => { g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); let prev=null;
+    for (const p of pts){ const X=x(p[0]), Y=yf(p[idx]/100); if (prev && p[0]-prev > gap*step) g.moveTo(X,Y); else if(prev==null) g.moveTo(X,Y); else g.lineTo(X,Y); prev=p[0]; } g.stroke(); };
+  line("#3db4ff", yH, 2); line("#ff8a3d", yT, 1);
+}
+
+// ---------- Bluetooth ----------
+let conn = null;   // {device, server, chars}
+function btAvailable(){ return !!(navigator.bluetooth && navigator.bluetooth.requestDevice); }
+
+async function syncNew(){
+  if (!btAvailable()) return showBtHelp();
+  let device;
+  try{
+    device = await navigator.bluetooth.requestDevice({ filters:[{ namePrefix:"BarnSense" }, { services:[SVC] }], optionalServices:[SVC] });
+  }catch(e){ if (e.name !== "NotFoundError") toast(e.message); return; }
+  await syncDevice(device);
+}
+
+async function syncDevice(device){
+  const id = device.name || device.id;
+  if (!sensors[id]) { sensors[id] = defaults(id, id); saveSensors(); }
+  const s = sensors[id];
+  toast("Connecting to " + s.name + "…", 15000);
+  try{
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SVC);
+    const ch = {
+      live: await svc.getCharacteristic(LIVE), info: await svc.getCharacteristic(INFO),
+      ctrl: await svc.getCharacteristic(CTRL), hist: await svc.getCharacteristic(HIST)
+    };
+    conn = { device, server, ch, id };
+    // send pending interval change first
+    if (s.pendingInterval && s.pendingInterval !== s.interval){
+      const b = new Uint8Array([2, s.pendingInterval & 255, s.pendingInterval >> 8]);
+      await ch.ctrl.writeValue(b); s.interval = s.pendingInterval; s.pendingInterval = null;
+    }
+    const info = parseInfo(await ch.info.readValue());
+    const bootEpoch = Date.now()/1000 - info.uptime;
+    let from = s.lastSeq;
+    if (!s.bootEpoch || Math.abs(bootEpoch - s.bootEpoch) > 120 || info.nextSeq < s.lastSeq){
+      from = 0;           // sensor rebooted (battery swap / charge) — fresh numbering
+      s.bootEpoch = bootEpoch;
+    }
+    s.interval = info.interval;
+    applyLive(s, await ch.live.readValue());
+    toast("Downloading history…", 30000);
+    const got = await downloadHistory(ch, from, s);
+    s.lastSync = Date.now()/1000; saveSensors();
+    toast(got ? `Synced ${got} new readings` : "Up to date");
+    if (got) upQueue("sensor", `BarnSense ${s.name.replace(/[^\w\- ]+/g,"_")}.csv`, "text/csv", new TextEncoder().encode(sensorCsv(id, true)), true);
+    // keep connected for live view
+    await ch.live.startNotifications();
+    ch.live.addEventListener("characteristicvaluechanged", ev => { applyLive(s, ev.target.value); saveSensors(); refresh(); });
+    setLiveUI(true);
+    if (curId !== id) openDetail(id); else renderDetail();
+  }catch(e){
+    console.error(e); toast("Sync failed: " + (e.message || e)); try{ device.gatt.disconnect(); }catch(_){}
+  }
+}
+
+function parseInfo(dv){
+  return { uptime: dv.getUint32(0,true), oldest: dv.getUint32(4,true), nextSeq: dv.getUint32(8,true),
+           interval: dv.getUint16(12,true), fw: dv.getUint16(14,true) };
+}
+function applyLive(s, dv){
+  s.live = { c: dv.getInt16(0,true)/100, h: dv.getUint16(2,true)/100, at: Date.now()/1000 };
+  s.batt = dv.getUint8(4); s.battMv = dv.getUint16(5,true);
+}
+
+function downloadHistory(ch, from, s){
+  return new Promise(async (resolve, reject) => {
+    const incoming = [];
+    let timer;
+    const done = () => {
+      ch.hist.removeEventListener("characteristicvaluechanged", onPkt);
+      ch.hist.stopNotifications().catch(()=>{});
+      clearTimeout(timer);
+      const arr = hist(s.id);
+      const lastT = arr.length ? arr[arr.length-1][0] : 0;
+      let added = 0;
+      for (const r of incoming) if (r[0] > lastT) { arr.push(r); added++; }
+      saveHist(s.id, arr);
+      resolve(added);
+    };
+    const kick = () => { clearTimeout(timer); timer = setTimeout(() => { done(); }, 8000); };
+    const onPkt = ev => {
+      const dv = ev.target.value; kick();
+      const first = dv.getUint32(0,true), n = dv.getUint8(4);
+      if (n === 0){ s.lastSeq = first; return done(); }
+      for (let i=0;i<n;i++){
+        const o = 5 + i*8;
+        const up = dv.getUint32(o,true), c = dv.getInt16(o+4,true), h = dv.getUint16(o+6,true);
+        incoming.push([Math.round(s.bootEpoch + up), c, h]);
+      }
+      s.lastSeq = first + n;
+      if (incoming.length % 500 < n) toast(`Downloading… ${incoming.length}`, 30000);
+    };
+    try{
+      ch.hist.addEventListener("characteristicvaluechanged", onPkt);
+      await ch.hist.startNotifications();
+      const b = new Uint8Array(5); b[0]=1; new DataView(b.buffer).setUint32(1, from, true);
+      await ch.ctrl.writeValue(b);
+      kick();
+    }catch(e){ reject(e); }
+  });
+}
+
+function onDisconnected(){ conn = null; setLiveUI(false); }
+function setLiveUI(on){
+  $("liveTag").style.display = on ? "inline-block" : "none"; $("liveTag").className = "pill ok" + (on?" live":"");
+  $("disconnectBtn").style.display = on ? "block" : "none";
+}
+function refresh(){ if (curId) renderDetail(); else renderList(); renderBanner(); }
+
+function showBtHelp(){
+  modal(`<div style="font-weight:700;font-size:18px">Bluetooth isn't available in this browser</div>
+    <p style="color:var(--dim)">iPhone Safari and Chrome can't talk to Bluetooth sensors. Install the free <b>Bluefy – Web BLE Browser</b> app from the App Store, then open this page's web address in Bluefy.</p>
+    <p style="color:var(--dim)">Want to look around first? Load demo data:</p>
+    <button class="primary" id="demoBtn" style="width:100%">Load demo sensors</button>
+    <button class="ghost" style="width:100%;margin-top:8px" onclick="document.getElementById('modal').style.display='none'">Close</button>`);
+  $("demoBtn").onclick = () => { loadDemo(); $("modal").style.display="none"; };
+}
+function modal(html){ $("sheet").innerHTML = html; $("modal").style.display = "flex"; }
+$("modal").onclick = e => { if (e.target.id === "modal") $("modal").style.display="none"; };
+
+// ---------- demo ----------
+function loadDemo(){
+  const now = Math.floor(Date.now()/1000);
+  [["House 1 – brood end", 31, 55], ["House 1 – tunnel end", 28.5, 62], ["House 2 – middle", 29.5, 58]].forEach(([nm, base, rh], k) => {
+    const id = "BarnSense-DEM" + k; const s = defaults(id, nm);
+    const arr = [];
+    for (let t = now - 10*86400; t <= now; t += 300){
+      const day = Math.sin((t/86400)*2*Math.PI - 1.2);
+      const c = base + day*2.2 + (Math.random()-.5)*.4 + (k===1 && t > now-5400 ? 3.5 : 0);
+      const h = rh - day*8 + (Math.random()-.5)*2;
+      arr.push([t, Math.round(c*100), Math.round(h*100)]);
+    }
+    s.live = { c: arr.at(-1)[1]/100, h: arr.at(-1)[2]/100, at: now };
+    s.batt = 82 - k*17; s.battMv = 3980 - k*120; s.lastSync = now - k*1800; s.bootEpoch = now - 10*86400;
+    sensors[id] = s; saveHist(id, arr);
+  });
+  saveSensors(); renderList(); toast("Demo sensors loaded");
+}
+
+// ---------- CSV ----------
+function sensorCsv(id, asF){
+  const arr = hist(id), f = asF ?? unitF;
+  const lines = [`time,temp_${f ? "F" : "C"},humidity_pct`];
+  for (const r of arr){ const d = new Date(r[0]*1000);
+    const ts = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+" "+d.toTimeString().slice(0,8);
+    const c = r[1]/100; lines.push(`${ts},${(f ? c*9/5+32 : c).toFixed(2)},${(r[2]/100).toFixed(1)}`); }
+  return lines.join("\n");
+}
+function exportCsv(){
+  const s = sensors[curId];
+  const csv = sensorCsv(curId), fname = s.name.replace(/[^\w\-]+/g,"_") + ".csv";
+  const file = new File([csv], fname, {type:"text/csv"});
+  if (navigator.canShare && navigator.canShare({files:[file]})){
+    navigator.share({files:[file], title: fname}).catch(()=>csvFallback(csv));
+  } else {
+    try{ const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = fname; a.click(); }catch(e){}
+    csvFallback(csv);
+  }
+}
+function csvFallback(csv){
+  modal(`<div style="font-weight:700">Export</div><p style="color:var(--dim);font-size:14px">If the file didn't save, copy this and paste it where you need it.</p>
+    <textarea readonly id="csvTa"></textarea><button class="primary" id="copyCsv" style="width:100%;margin-top:10px">Copy</button>
+    <button class="ghost" style="width:100%" onclick="document.getElementById('modal').style.display='none'">Close</button>`);
+  $("csvTa").value = csv;
+  $("copyCsv").onclick = () => navigator.clipboard.writeText(csv).then(()=>toast("Copied"), ()=>{ $("csvTa").select(); toast("Select all & copy"); });
+}
+
+// ---------- controller link (BarnLink capture board) ----------
+const L_SVC  = "6e400100-b5a3-f393-e0a9-e50e24dc0001";
+const L_STAT = "6e400101-b5a3-f393-e0a9-e50e24dc0001";
+const L_CTRL = "6e400102-b5a3-f393-e0a9-e50e24dc0001";
+const L_DATA = "6e400103-b5a3-f393-e0a9-e50e24dc0001";
+const L_FILE = "6e400104-b5a3-f393-e0a9-e50e24dc0001";   // Waveshare board (fw 3+) only
+let link = null;
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++){ let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8){ let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+const enc = s => new TextEncoder().encode(s);
+// file channel: one listener, handler swapped per request
+let fileHandler = null;
+function fileCmd(bytes, handler, idleMs = 8000){
+  return new Promise(resolve => {
+    let timer; const finish = v => { clearTimeout(timer); fileHandler = null; resolve(v); };
+    const kick = () => { clearTimeout(timer); timer = setTimeout(() => finish(null), idleMs); };
+    fileHandler = dv => { kick(); const r = handler(dv); if (r !== undefined) finish(r); };
+    kick(); link.ch.ctrl.writeValue(bytes).catch(() => finish(null));
+  });
+}
+async function filesList(){
+  if (!link || !link.ch.file) return;
+  $("filesList").textContent = "Loading…";
+  const files = [];
+  const r = await fileCmd(new Uint8Array([0x10]), dv => {
+    const t = dv.getUint8(0);
+    if (t === 0x10) files.push({ size: dv.getUint32(1,true), saved: dv.getUint32(5,true), name: new TextDecoder().decode(new Uint8Array(dv.buffer, dv.byteOffset + 9, dv.byteLength - 9)) });
+    if (t === 0x1F) return files;
+  });
+  if (!r) return $("filesList").textContent = "No answer from the board.";
+  const got = store.get("bs.gotFiles", {});
+  files.sort((a, b) => b.name.localeCompare(a.name));
+  $("filesList").innerHTML = files.length ? files.map((f, i) => {
+    const short = f.name.replace(/^\d+_\d+_/, ""), when = f.saved ? new Date(f.saved * 1000).toLocaleString() : "time unknown";
+    return `<div style="display:flex;align-items:center;gap:8px;margin-top:8px"><div style="flex:1"><b>${esc(short)}</b> · ${(f.size/1024).toFixed(0)} KB<br><span style="color:var(--dim);font-size:13px">saved ${esc(when)}${got[f.name] ? " · downloaded" : ""}</span></div><button data-f="${i}" class="fget">Download</button></div>`;
+  }).join("") : "No files yet. Save from the controller to its memory card first.";
+  document.querySelectorAll(".fget").forEach(b => b.onclick = () => fileGet(files[+b.dataset.f]));
+  // Drive set up: grab every new file (controller saves + the scan recording) and send it on, no taps needed
+  if (upCfg().url && !autoGetting){
+    const fresh = files.filter(f => !got[f.name] && !/CAPTURE\.BIN$/.test(f.name));   // CAPTURE = the hour still being written; it arrives later as a MODLINE file
+    if (fresh.length){ autoGetting = true;
+      try{ let ok = 0; for (const f of fresh){ for (let t = 0; t < 3; t++){ if (await fileGet(f, true)){ ok++; break; } await new Promise(r => setTimeout(r, 1500)); } }
+        toast(ok === fresh.length ? `${ok} file(s) downloaded and sent to Drive` : `${ok} of ${fresh.length} files downloaded; tap Refresh list to try the rest`); }
+      finally{ autoGetting = false; } filesList(); }
+  }
+}
+let autoGetting = false;
+async function fileGet(f, auto){
+  const buf = new Uint8Array(f.size); let got = 0;
+  toast(`Downloading ${f.name.replace(/^\d+_\d+_/, "")}…`, 60000);
+  const cmd = new Uint8Array([0x11, 0, 0, 0, 0, ...enc(f.name)]);
+  const r = await fileCmd(cmd, dv => {
+    const t = dv.getUint8(0);
+    if (t === 0x11){ const off = dv.getUint32(1,true), n = dv.byteLength - 5; if (off + n <= buf.length){ buf.set(new Uint8Array(dv.buffer, dv.byteOffset + 5, n), off); got = Math.max(got, off + n); }
+      if (got % 32768 < n) toast(`Downloading… ${Math.round(100 * got / f.size)}%`, 60000); }
+    if (t === 0x12) return { size: dv.getUint32(1,true), crc: dv.getUint32(5,true) };
+    if (t === 0x1E) return { err: dv.getUint8(1) };
+  });
+  if (!r || r.err){ toast(r && r.err === 1 ? "File not found on board" : "Download stopped. Trying again…"); return false; }
+  if (got !== r.size || crc32(buf) !== r.crc){ toast("Download damaged (check failed). Trying again…"); return false; }
+  const got2 = store.get("bs.gotFiles", {}); got2[f.name] = Date.now(); store.set("bs.gotFiles", got2);
+  const label = (link.name || "BarnLink").replace(/^BarnLink[ -]?/, "").replace(/\s+/g, "_");
+  const fname = `${label ? label + "_" : ""}${f.name}`;
+  const file = new File([buf], fname, { type: "application/octet-stream" });
+  if (upCfg().url){   // Drive set up: send it there (octet-stream keeps the controller's bytes exact)
+    await upQueue("controller", fname, "application/octet-stream", buf, true);
+    toast("Downloaded and checked · sending to Drive"); if (!auto) filesList(); return true;
+  }
+  toast("Downloaded and checked");
+  if (navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: fname }).catch(() => {});
+  else { const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = fname; a.click(); }
+  filesList(); return true;
+}
+const b64e = u8 => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+function loadCap(){ const c = store.get("bs.cap", null); return c ? { at: c.at, name: c.name, bytes: b64d(c.data) } : null; }
+function parseLinkStatus(dv){
+  const ch = o => ({ baud: dv.getUint32(o,true), bytes: dv.getUint32(o+4,true), frames: dv.getUint16(o+8,true), fixed: dv.getUint8(o+10), parity: dv.getUint8(o+11) });
+  const st = { uptime: dv.getUint32(0,true), used: dv.getUint32(4,true), size: dv.getUint32(8,true), full: !!(dv.getUint8(12)&1), scanning: !!(dv.getUint8(12)&2), fw: dv.getUint8(13), A: ch(14), B: ch(26) };
+  if (dv.byteLength >= 46) st.scan = { idx: dv.getUint16(38,true), total: dv.getUint16(40,true), hits: dv.getUint16(42,true), lastHit: dv.getUint16(44,true) };
+  if (dv.byteLength >= 48 && st.fw >= 3){ const f2 = dv.getUint8(47); st.files = { count: dv.getUint8(46), usb: !!(f2&1), written: !!(f2&2), fresh: !!(f2&4), full: !!(f2&8) }; }
+  if (st.fw >= 8){ const f = dv.getUint8(31); st.lock = !!(f&1); st.relaySeen = !!(f&16); st.relayChanges = dv.getUint16(36,true); st.scan = null; }
+  if (st.fw >= 12 && dv.byteLength >= 64){
+    st.clockSrc = dv.getUint8(48);
+    const hx = b => b.toString(16).toUpperCase().padStart(2,"0");
+    st.gv = { count: dv.getUint8(49), adverts: dv.getUint32(60,true), id: hx(dv.getUint8(50)) + hx(dv.getUint8(51)),
+      f: dv.getInt16(52,true) / 100 * 9 / 5 + 32, rh: dv.getUint16(54,true) / 100, batt: dv.getUint8(56), age: dv.getUint16(58,true) };
+  }
+  return st;
+}
+function renderLinkStatus(st){
+  const line = (n, c) => `<div style="margin-top:6px"><b>${n}</b>: ${c.baud ? c.baud + " baud" + (c.parity ? " even" : "") : "<span style='color:var(--warn)'>listening for activity…</span>"} · ${c.bytes.toLocaleString()} bytes · ${c.frames} messages</div>`;
+  if (st.fw >= 8){
+    const ok = t => `<span style='color:var(--ok)'>${t}</span>`, dim = t => `<span style='color:var(--dim)'>${t}</span>`;
+    const g = st.gv;
+    $("linkStatus").innerHTML = `${link ? esc(link.name) : ""} · fw v${st.fw} · up ${Math.round(st.uptime/60)} min`
+      + `<div style="margin-top:6px">${st.lock ? ok("● Listen only (never sends to the controller)") : "<span style='color:var(--bad)'>Listen lock OFF</span>"}</div>`
+      + `<div style="margin-top:6px"><b>Fans/heaters</b>: ${st.relaySeen ? ok(`hearing the relay bus · ${st.relayChanges} changes logged`) : (st.A.bytes ? `${st.A.bytes.toLocaleString()} bytes heard` : dim("line quiet"))}</div>`
+      + (g ? `<div style="margin-top:6px"><b>Govee sensors</b>: ${g.count ? `${g.count} heard · newest <b>${g.id}</b> ${g.f.toFixed(1)}°F · ${g.rh.toFixed(0)}% RH · battery ${g.batt <= 20 ? `<span style='color:var(--bad)'>${g.batt}%</span>` : g.batt + "%"}` : dim("none in range")}</div>` : "")
+      + (st.clockSrc !== undefined ? `<div style="margin-top:6px">${st.clockSrc === 2 ? ok("Clock set from the controller") : dim("Clock from phone (plug the board into the controller and run Transfer → 2 to use the controller's clock)")}</div>` : "")
+      + `<div style="margin-top:6px">${dim(`Not yet saved: ${(st.used/1024).toFixed(1)} KB (goes into a file every hour)`)}</div>`;
+  } else
+  $("linkStatus").innerHTML = `${link ? esc(link.name) : ""} · up ${Math.round(st.uptime/60)} min<br>Capture ${(st.used/1024).toFixed(1)} of ${(st.size/1024).toFixed(0)} KB${st.full ? " <span class='pill bad'>full</span>" : ""}`
+    + line("A – PC terminals", st.A) + line("B – Module comm", st.B);
+  if (st.files){
+    const f = st.files;
+    $("filesUsb").innerHTML = `${f.usb ? "<span style='color:var(--ok)'>● Controller USB connected</span>" : "<span style='color:var(--dim)'>Controller USB not seen yet</span>"} · ${f.count} file${f.count === 1 ? "" : "s"} saved${f.fresh ? " · <b>new file</b>" : ""}${f.full ? " · <span style='color:var(--bad)'>drive full</span>" : ""}`;
+    if (f.fresh && !link._listing){ link._listing = true; filesList().finally(() => link && (link._listing = false)); }
+  }
+  $("scanCard").style.display = st.scan ? "block" : "none";
+  if (st.scan){
+    const sc = st.scan, pct = Math.round(100 * sc.idx / sc.total);
+    $("scanStatus").innerHTML = st.scanning
+      ? `<span class="live" style="color:var(--warn)">● Scanning</span> · question ${sc.idx + 1} of ${sc.total} (${pct}%) · <b>${sc.hits}</b> answered`
+      : (sc.idx || sc.hits ? `Last scan: ${sc.hits ? `<b style="color:var(--ok)">${sc.hits} answered</b> (last at question ${sc.lastHit + 1}) — download and send me the export` : "no answers yet"}` : "Not running.");
+  }
+}
+function renderCapInfo(){
+  const c = loadCap();
+  $("capInfo").textContent = c ? `${c.bytes.length.toLocaleString()} bytes from ${c.name}, downloaded ${ago(c.at)} · ${parseCapture(c.bytes).length} messages` : "None yet.";
+}
+function parseCapture(u8){
+  const out = []; let i = 0;
+  while (i + 7 <= u8.length){
+    if (u8[i] !== 0xA5){ i++; continue; }
+    const ch = String.fromCharCode(u8[i+1]);
+    const ms = u8[i+2] | (u8[i+3]<<8) | (u8[i+4]<<16) | (u8[i+5]<<24) >>> 0;
+    const n = u8[i+6];
+    if (i + 7 + n > u8.length) break;
+    out.push({ ch, ms: ms >>> 0, data: u8.slice(i+7, i+7+n) });
+    i += 7 + n;
+  }
+  return out;
+}
+function hexDump(u8){
+  const recs = parseCapture(u8);
+  const lines = ["# BarnLink capture  ch: A=heard on PC line, B=heard on MODULES line, T=board sent  time(s)  len  bytes(hex)  |ascii|"];
+  for (const r of recs){
+    const hex = [...r.data].map(b => b.toString(16).padStart(2,"0")).join(" ");
+    const asc = [...r.data].map(b => b >= 32 && b < 127 ? String.fromCharCode(b) : ".").join("");
+    lines.push(`${r.ch}  ${(r.ms/1000).toFixed(3).padStart(10)}  ${String(r.data.length).padStart(3)}  ${hex}  |${asc}|`);
+  }
+  return lines.join("\n");
+}
+async function linkConnect(){
+  if (!btAvailable()) return showBtHelp();
+  let device;
+  try{ device = await navigator.bluetooth.requestDevice({ filters:[{ namePrefix:"BarnLink" }, { services:[L_SVC] }], optionalServices:[L_SVC] }); }
+  catch(e){ if (e.name !== "NotFoundError") toast(e.message); return; }
+  try{
+    toast("Connecting…", 15000);
+    device.addEventListener("gattserverdisconnected", () => { link = null; fileHandler = null; $("linkTag").style.display="none"; $("linkCfg").style.display="none"; $("filesCard").style.display="none"; $("linkConnBtn").textContent="Connect"; });
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(L_SVC);
+    const ch = { stat: await svc.getCharacteristic(L_STAT), ctrl: await svc.getCharacteristic(L_CTRL), data: await svc.getCharacteristic(L_DATA) };
+    try{ ch.file = await svc.getCharacteristic(L_FILE); }catch(_){ ch.file = null; }   // older boards have no file channel
+    link = { device, ch, name: device.name || "BarnLink" };
+    { const bd = store.get("bs.boards", {}); bd[link.name] = Date.now(); store.set("bs.boards", bd); }
+    $("linkTag").style.display="inline-block"; $("linkTag").className="pill ok live"; $("linkCfg").style.display="block";
+    $("linkConnBtn").textContent = "Download again";
+    if (ch.file){
+      const t = new Uint8Array(5); t[0] = 0x20; new DataView(t.buffer).setUint32(1, Math.floor(Date.now()/1000), true);
+      await ch.ctrl.writeValue(t);                                        // give the board the time
+      await ch.file.startNotifications();
+      ch.file.addEventListener("characteristicvaluechanged", ev => fileHandler && fileHandler(ev.target.value));
+      $("filesCard").style.display = "block";
+    }
+    const st = parseLinkStatus(await ch.stat.readValue()); renderLinkStatus(st);
+    await ch.stat.startNotifications();
+    ch.stat.addEventListener("characteristicvaluechanged", ev => renderLinkStatus(parseLinkStatus(ev.target.value)));
+    if (ch.file) await filesList();
+    if (st.fw < 8) await linkDownload(st.used);
+  }catch(e){ console.error(e); toast("Link failed: " + (e.message || e)); try{ device.gatt.disconnect(); }catch(_){} }
+}
+function linkDownload(total){
+  const ch = link.ch;
+  return new Promise(async (resolve, reject) => {
+    const buf = new Uint8Array(total + 65536); let got = 0, timer;
+    const done = () => {
+      clearTimeout(timer); ch.data.removeEventListener("characteristicvaluechanged", onPkt); ch.data.stopNotifications().catch(()=>{});
+      const bytes = buf.slice(0, got);
+      if (got) { store.set("bs.cap", { at: Date.now()/1000, name: link.name, data: b64e(bytes) }); toast(`Downloaded ${got.toLocaleString()} bytes`); }
+      else toast("Board has nothing captured yet");
+      renderCapInfo(); resolve(got);
+    };
+    const kick = () => { clearTimeout(timer); timer = setTimeout(done, 8000); };
+    const onPkt = ev => {
+      const dv = ev.target.value; kick();
+      const off = dv.getUint32(0,true), n = dv.byteLength - 4;
+      if (n <= 0) return done();
+      if (off + n <= buf.length) { buf.set(new Uint8Array(dv.buffer, dv.byteOffset + 4, n), off); got = Math.max(got, off + n); }
+      if (got % 8192 < n) toast(`Downloading… ${Math.round(got/1024)} KB`, 30000);
+    };
+    try{
+      if (!total) return done();
+      ch.data.addEventListener("characteristicvaluechanged", onPkt);
+      await ch.data.startNotifications();
+      const b = new Uint8Array(5); b[0] = 1; await ch.ctrl.writeValue(b);
+      kick();
+    }catch(e){ reject(e); }
+  });
+}
+function openLink(){ $("listView").style.display="none"; $("linkView").style.display="block"; renderCapInfo(); window.scrollTo(0,0); }
+function closeLink(){ $("linkView").style.display="none"; $("listView").style.display="block"; renderList(); }
+$("linkBtn").onclick = openLink;
+$("linkBackBtn").onclick = closeLink;
+$("linkConnBtn").onclick = async () => {
+  if (link){ const st = parseLinkStatus(await link.ch.stat.readValue()); renderLinkStatus(st); if (st.fw >= 8) await filesList(); else await linkDownload(st.used); }
+  else linkConnect();
+};
+$("cfgApply").onclick = async () => {
+  if (!link) return;
+  const b = new Uint8Array(7), dv = new DataView(b.buffer);
+  b[0] = 3; b[1] = +$("cfgCh").value; dv.setUint32(2, +$("cfgBaud").value, true); b[6] = +$("cfgPar").value;
+  await link.ch.ctrl.writeValue(b); toast("Sent to board");
+};
+$("scanStartBtn").onclick = () => {
+  if (!link) return toast("Connect to the board first");
+  modal(`<div style="font-weight:700;font-size:17px">Start discovery scan?</div>
+    <p style="color:var(--dim)">The board will send read-only questions to the controller for about 3 minutes. It never sends anything that changes a setting, but run it only <b>between flocks with no birds in the house</b>, and watch the controller screen while it runs.</p>
+    <button class="primary" id="yesScan" style="width:100%">The house is empty — start</button>
+    <button class="ghost" style="width:100%;margin-top:8px" onclick="document.getElementById('modal').style.display='none'">Cancel</button>`);
+  $("yesScan").onclick = async () => { $("modal").style.display="none"; await link.ch.ctrl.writeValue(new Uint8Array([4,1])); toast("Scan started"); };
+};
+$("scanStopBtn").onclick = async () => { if (!link) return; await link.ch.ctrl.writeValue(new Uint8Array([4,0])); toast("Scan stopped"); };
+$("filesRefresh").onclick = () => link ? filesList() : toast("Connect to the board first");
+$("labelSet").onclick = async () => {
+  if (!link) return toast("Connect to the board first");
+  const v = $("labelIn").value.trim(); if (!v) return toast("Type a label first");
+  await link.ch.ctrl.writeValue(new Uint8Array([0x21, ...enc(v.slice(0, 12))])); toast("Label saved; unplug and replug the board to apply");
+};
+$("capClearBtn").onclick = async () => { if (!link) return; await link.ch.ctrl.writeValue(new Uint8Array([2])); toast("Board capture cleared"); };
+$("capExportBtn").onclick = () => {
+  const c = loadCap(); if (!c) return toast("Download a capture first");
+  const txt = hexDump(c.bytes), fname = "barnlink-capture.txt";
+  const file = new File([txt], fname, {type:"text/plain"});
+  if (navigator.canShare && navigator.canShare({files:[file]})) navigator.share({files:[file], title: fname}).catch(()=>csvFallback(txt));
+  else csvFallback(txt);
+};
+
+// ---------- auto-save to Google Drive ----------
+// Files wait in a list on the phone (IndexedDB) until there is internet, then go to
+// the owner's Apps Script web app, which saves them in their Drive folders.
+const upCfg = () => store.get("bs.drive", {});
+let upDb = null, upBusy = false;
+function upOpen(){
+  if (upDb) return Promise.resolve(upDb);
+  return new Promise((ok, bad) => {
+    const r = indexedDB.open("barnsense-upload", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("q", { keyPath: "id", autoIncrement: true });
+    r.onsuccess = () => ok(upDb = r.result); r.onerror = () => bad(r.error);
+  });
+}
+async function upTx(mode, fn){
+  const db = await upOpen();
+  return new Promise((ok, bad) => { const tx = db.transaction("q", mode), st = tx.objectStore("q"); const res = fn(st);
+    tx.oncomplete = () => ok(res && res.result !== undefined ? res.result : undefined); tx.onerror = () => bad(tx.error); });
+}
+async function upQueue(kind, name, mime, bytes, replace){
+  try{
+    // a newer copy of the same file replaces one still waiting
+    const all = await upTx("readonly", st => st.getAll());
+    for (const it of all) if (it.kind === kind && it.name === name) await upTx("readwrite", st => st.delete(it.id));
+    await upTx("readwrite", st => st.add({ kind, name, mime, data: b64e(bytes), replace, added: Date.now() }));
+  }catch(e){ console.error(e); toast("Couldn't hold the file for Drive: " + (e.message || e)); }
+  upStatus(); upFlush();
+}
+async function upCount(){ try{ return await upTx("readonly", st => st.count()); }catch(e){ return 0; } }
+async function upStatus(){
+  const n = await upCount(), c = upCfg();
+  $("driveNotice").innerHTML = c.url ? "" : `<div class="notice">Drive saving isn't set up yet, so your data stays only on this phone. Do the one-time Google script setup (steps in the BarnSense folder: "BarnSense Drive upload - setup steps"), then tap <a href="#" id="driveNoticeLink">set up Drive</a> (also in ☰ → Settings).</div>`;
+  if (!c.url) $("driveNoticeLink").onclick = e => { e.preventDefault(); openDrive(); };
+  $("driveBtn").textContent = !c.url ? "☁ Set up Drive saving" : n ? `☁ ${n} file(s) waiting to send` : "☁ All saved to Drive";
+  $("driveBtn").style.color = !c.url ? "" : n ? "var(--warn)" : "var(--ok)";
+}
+async function upPost(body){
+  const c = upCfg();
+  const r = await fetch(c.url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ ...body, token: c.token }) });
+  const j = await r.json(); if (!j.ok) throw new Error(j.error || "upload refused"); return j;
+}
+async function upFlush(){
+  const c = upCfg(); if (!c.url || !c.token || upBusy || !navigator.onLine) return;
+  upBusy = true;
+  try{
+    const items = await upTx("readonly", st => st.getAll());
+    for (const it of items){
+      await upPost({ kind: it.kind, name: it.name, mime: it.mime, data: it.data, replace: it.replace });
+      await upTx("readwrite", st => st.delete(it.id));
+      store.set("bs.driveLast", { at: Date.now(), name: it.name });
+      upStatus();
+    }
+  }catch(e){ console.warn("Drive upload will retry:", e); store.set("bs.driveErr", { at: Date.now(), msg: String(e.message || e) }); }
+  upBusy = false; upStatus();
+}
+async function openDrive(){
+  const c = upCfg(), n = await upCount(), last = store.get("bs.driveLast", null), err = store.get("bs.driveErr", null);
+  modal(`<div style="font-weight:700;font-size:17px">Save to Google Drive</div>
+    <p style="color:var(--dim);font-size:14px">Every sensor sync and every controller file goes to your Drive by itself: sensors to <b>Sensor Data – Daily</b>, controller files to <b>Controller data</b>. With no signal (GB) they wait on the phone and send when you have internet.</p>
+    <label>Upload link (from the Google Apps Script setup)</label><input id="dvUrl" value="${esc(c.url || "")}" placeholder="https://script.google.com/macros/s/…/exec">
+    <label>Upload code</label><input id="dvTok" value="${esc(c.token || "")}" autocomplete="off">
+    <div class="meta" style="color:var(--dim);font-size:13px;margin-top:8px">${n} file(s) waiting${last ? ` · last saved ${ago(last.at/1000)} (${esc(last.name)})` : ""}${err && (!last || err.at > last.at) ? `<br><span style="color:var(--warn)">Last try failed: ${esc(err.msg)}</span>` : ""}</div>
+    <div style="display:flex;gap:10px;margin-top:12px"><button class="primary" id="dvSave" style="flex:1">Save & test</button><button id="dvSend" style="flex:1">Send now</button></div>
+    <button class="ghost" style="width:100%;margin-top:8px" onclick="document.getElementById('modal').style.display='none'">Close</button>`);
+  $("dvSave").onclick = async () => {
+    const url = $("dvUrl").value.trim(), token = $("dvTok").value.trim();
+    if (!/^https:\/\/script\.google\.com\//.test(url)) return toast("The link should start with https://script.google.com/");
+    store.set("bs.drive", { url, token });
+    try{ await upPost({ ping: true }); toast("Connected to your Drive"); upFlush(); fetchAlerts(); }
+    catch(e){ toast("Test failed: " + (e.message || e), 5000); }
+    upStatus();
+  };
+  $("dvSend").onclick = () => { if (!navigator.onLine) return toast("No internet right now; it'll send later"); upFlush().then(() => openDrive()); };
+}
+window.addEventListener("online", upFlush);
+setInterval(upFlush, 5 * 60000);
+
+// ---------- alert banner (top of every screen) ----------
+// Two sources: this phone's sensors (out of range at last reading) and Claude's
+// alerts file ("BarnSense alerts.json" in Drive, fetched through the Drive link).
+function localAlerts(){
+  const out = [];
+  for (const id of Object.keys(sensors)){
+    const s = sensors[id], a = alertState(s) || [];
+    if (!a.length) continue;
+    const temp = a.filter(x => x === "cold" || x === "hot"), rh = a.filter(x => x === "dry" || x === "wet");
+    out.push({ id: "local-" + id + "-" + a.join(""), level: temp.length ? "critical" : "watch",
+      text: `${s.name}: ${a.join(", ")} (${fmtT(s.live?.c)}, ${fmtH(s.live?.h)})`, src: `sensor, ${ago(s.live?.at || s.lastSync)}` });
+  }
+  return out;
+}
+function claudeAlerts(){
+  const c = store.get("bs.claudeAlerts", null); if (!c || !Array.isArray(c.alerts)) return [];
+  const now = Date.now();
+  return c.alerts.filter(a => !a.until || new Date(a.until).getTime() + 86400000 > now)
+    .map(a => ({ id: "claude-" + (a.id || a.text), level: a.level === "critical" ? "critical" : "watch",
+      text: (a.farm ? a.farm + (a.house ? " H" + a.house : "") + ": " : "") + a.text, src: "from Claude" + (c.updated ? ", " + ago(new Date(c.updated).getTime()/1000) : "") }));
+}
+function renderBanner(){
+  const hidden = store.get("bs.hiddenAlerts", {});
+  const all = [...localAlerts(), ...claudeAlerts()].filter(a => !hidden[a.id])
+    .sort((a, b) => (a.level === "critical" ? 0 : 1) - (b.level === "critical" ? 0 : 1));
+  $("banner").innerHTML = all.map(a => `<div class="alertrow ${a.level}"><span>${a.level === "critical" ? "⚠️" : "👀"}</span>
+    <div>${esc(a.text)}<div class="src">${esc(a.src)}</div></div><button data-hide="${esc(a.id)}" aria-label="Hide">×</button></div>`).join("");
+}
+$("banner").addEventListener("click", e => { const b = e.target.closest("[data-hide]"); if (!b) return;
+  const h = store.get("bs.hiddenAlerts", {}); h[b.dataset.hide] = Date.now(); store.set("bs.hiddenAlerts", h); renderBanner(); });
+async function fetchAlerts(){
+  const c = upCfg(); if (!c.url || !c.token || !navigator.onLine) return;
+  try{ const j = await upPost({ getAlerts: true }); if (j.alerts){ store.set("bs.claudeAlerts", j.alerts); renderBanner(); } }
+  catch(e){ console.warn("Alerts not fetched:", e); }
+}
+window.addEventListener("online", fetchAlerts);
+setInterval(fetchAlerts, 15 * 60000);
+
+// ---------- flock reminders ----------
+// Day numbers = days since placement (placement day = day 0), same as the farm files.
+const FARMS = [
+  { id:"CC", name:"CC", houses:4 },
+  { id:"GB", name:"GB",  houses:2 },
+  { id:"DS", name:"DS",       houses:3 }
+];
+const ALL = ["CC","GB","DS"], CCGB = ["CC","GB"];
+const DEFAULT_TASKS = [
+  {id:"pre1", day:-2, farms:ALL,  text:"Before chicks: check every heater lights, probes read right, drinker pressure set, feed in the bins. Fix anything that broke last flock (heaters, probes)."},
+  {id:"pre2", day:-1, farms:ALL,  text:"Set controller: bird age, set point curve on, lights 18 on / 6 off (on at 3 AM), night set point. Tell Claude the placement date (weather email + water pull)."},
+  {id:"d0a",  day:0,  farms:ALL,  text:"Placement: write birds placed per house on the mortality sheets. Check every house has water at every line (CC-19 H2 had no water day 1 and broke with IBH)."},
+  {id:"d0b",  day:0,  farms:["CC"], text:"Min vent: two 36-inch fans (ex1 + T4 spots) on attic inlets, ~24,000 CFM (0.95/sq ft). No fans in the brooded section."},
+  {id:"d0c",  day:0,  farms:["DS"], text:"Min vent: H2–H3 one full + one half-baffled fan at the end away from the chicks (~15,000 CFM, 0.94/sq ft). H1 (center brooded) both end fans baffled, middle fan off."},
+  {id:"d1",   day:1,  farms:ALL,  text:"Walk every house: chicks spread out, at feed and water, not piled or panting. Set point 93°F at day 1."},
+  {id:"d3",   day:3,  farms:["DS"], text:"Take baffles off: 2 full fans in all 3 houses (20,000 CFM, 1.25/sq ft)."},
+  {id:"d5",   day:5,  farms:["CC"], text:"Add the 2 box fans (ex2, ex3) to min vent (~38,000 CFM, 1.50/sq ft), day 5–6."},
+  {id:"d7a",  day:7,  farms:ALL,  text:"Week 1 mortality total per house. If over the week average, ask the service tech about a chick credit (GB-28 got one at 3.84%)."},
+  {id:"d7b",  day:7,  farms:ALL,  text:"Start the night set point drop (~2°F below set point, 30 min before lights off to 30 min after lights on)."},
+  {id:"d7c",  day:7,  farms:CCGB, text:"Set point should read 87°F on the curve."},
+  {id:"d8",   day:8,  farms:["GB"], text:"Open the tunnel-end chamber to the birds (day 8–9)."},
+  {id:"d10",  day:10, farms:["DS"], text:"Birds get the whole house (day 10–12): add the 3rd fan, 3 full fans (30,000 CFM, 1.88/sq ft)."},
+  {id:"d15lv",day:15, farms:ALL,  text:"Days 15–18: level the feed lines and water lines the whole length of the house."},
+  {id:"d14",  day:14, farms:CCGB, text:"Set point should read 82°F."},
+  {id:"d15",  day:15, farms:ALL,  text:"Days 15–25: look for birds bunching at the tunnel end (warm tunnel-end probe = birds thicker there). Spread them / migration fences."},
+  {id:"d18",  day:18, farms:["CC"], text:"Swap ex1 and T4 from the 36-inch fans to the 48-inch tunnel fans; box fans off min vent (2 tunnel fans, ~44,000 CFM, 1.73/sq ft)."},
+  {id:"d21",  day:21, farms:CCGB, text:"Set point should read 78°F."},
+  {id:"d22",  day:22, farms:ALL,  text:"Days 22–35 = IBH window (spikes in CC-18 to CC-21). Count mortality every day; a jump in one house = call the service tech. Avoid stress: no water or feed outages, no hot or cold spells."},
+  {id:"d28",  day:28, farms:CCGB, text:"Set point should read 75°F."},
+  {id:"d30",  day:30, farms:ALL,  text:"Days 30–40, as nights turn cold: watch for huddling on the ends. Fixes used on CC-22: end-probe offsets, shavings, stop the night drop, box fans off."},
+  {id:"d35",  day:35, farms:CCGB, text:"Set point should read 71°F. Check feed bin levels daily from here (outages in CC-22 days 33–43)."},
+  {id:"d41",  day:41, farms:ALL,  text:"Consider cutting dark to 5 h (done day 41–43 on CC-22 / GB-28)."},
+  {id:"d42",  day:42, farms:CCGB, text:"Set point should read 68°F. Ask for the catch date; tell Claude when you have it."},
+  {id:"d47",  day:47, farms:ALL,  text:"Before catch: photograph the mortality sheet back pages for every house; check the bins will last to catch."},
+  {id:"d49",  day:49, farms:ALL,  text:"Catch (about day 48–49). Note which end the crew started. Pause the nightly water pull."},
+  {id:"d55",  day:55, farms:ALL,  text:"Settlement: send the packet to Claude. List what broke this flock so it gets fixed before the next one."}
+];
+let flocks = store.get("bs.flocks", {});            // farmId -> {placed:"YYYY-MM-DD", no:""}
+let tasks  = store.get("bs.tasks", null) || DEFAULT_TASKS.map(t => ({...t}));
+let done   = store.get("bs.done", {});               // "farm|placed|taskId" -> true
+const saveFlocks = () => store.set("bs.flocks", flocks);
+const saveTasks  = () => store.set("bs.tasks", tasks);
+const saveDone   = () => store.set("bs.done", done);
+const ymd = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const parseYmd = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const todayD = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
+const flockDay = f => Math.round((todayD() - parseYmd(flocks[f].placed)) / 86400000);
+const shortDate = d => d.toLocaleDateString(undefined, {weekday:"short", month:"numeric", day:"numeric"});
+const dKey = (f, t) => f + "|" + flocks[f].placed + "|" + t.id;
+function farmTasks(f){ return tasks.filter(t => t.farms.includes(f)).sort((a,b) => a.day - b.day); }
+function activeFarms(){ return FARMS.filter(F => flocks[F.id]?.placed && flockDay(F.id) <= 60); }
+function dueNow(f){   // today + anything earlier not ticked off (overdue)
+  const day = flockDay(f);
+  return farmTasks(f).filter(t => t.day <= day && !done[dKey(f,t)]);
+}
+function taskRow(f, t){
+  const day = flockDay(f), when = addDays(parseYmd(flocks[f].placed), t.day), isDone = !!done[dKey(f,t)];
+  const late = !isDone && t.day < day;
+  return `<div class="task ${isDone?"done":""} ${late?"late":""}">
+    <input type="checkbox" data-f="${f}" data-t="${esc(t.id)}" ${isDone?"checked":""}>
+    <div><div class="when">Day ${t.day} · ${shortDate(when)}${late?" · overdue":t.day===day?" · today":""}</div><div class="txt">${esc(t.text)}</div></div></div>`;
+}
+function renderFlockToday(){
+  const act = activeFarms(), parts = [];
+  for (const F of act){
+    const day = flockDay(F.id), all = dueNow(F.id);
+    const list = all.filter(t => t.day >= day - 3), older = all.length - list.length;   // home screen: today + last 3 days
+    if (list.length || older) parts.push(`<div style="margin-top:8px;font-weight:600">${F.name} · day ${day}</div>` + list.map(t => taskRow(F.id, t)).join("")
+      + (older ? `<div class="meta" style="color:var(--dim);font-size:13px;margin-top:6px">${older} older task${older>1?"s":""} not ticked off. Open <b>☰ → Tasks</b> to see them.</div>` : ""));
+  }
+  $("flockToday").innerHTML = parts.length ? `<div class="card" style="border-color:var(--temp)"><div style="color:var(--temp);font-weight:600">Tasks due</div>${parts.join("")}</div>` : "";
+}
+function renderFlock(){
+  $("flockFarms").innerHTML = FARMS.map(F => {
+    const fl = flocks[F.id] || {}, has = !!fl.placed;
+    let body = "";
+    if (has){
+      const day = flockDay(F.id), all = farmTasks(F.id);
+      const due = all.filter(t => t.day <= day && !done[dKey(F.id,t)]);
+      const next = all.filter(t => t.day > day && t.day <= day + 7);
+      body = `<div class="farmhead"><div><span class="daynum">Day ${day}</span> <span class="meta" style="color:var(--dim);font-size:13px">placed ${shortDate(parseYmd(fl.placed))} · catch ~${shortDate(addDays(parseYmd(fl.placed), 49))}</span></div></div>
+        <div style="margin-top:8px;font-weight:600">Due now</div>${due.length ? due.map(t => taskRow(F.id,t)).join("") : `<div class="meta" style="color:var(--dim);font-size:14px">Nothing due. </div>`}
+        <div style="margin-top:10px;font-weight:600">Next 7 days</div>${next.length ? next.map(t => taskRow(F.id,t)).join("") : `<div class="meta" style="color:var(--dim);font-size:14px">Nothing in the next week.</div>`}
+        <details><summary>Whole flock (${all.length} tasks)</summary>${all.map(t => taskRow(F.id,t)).join("")}</details>
+        <div style="display:flex;gap:10px;margin-top:12px">
+          <button class="primary" data-ics="${F.id}" style="flex:1">Add to calendar</button>
+          <button data-end="${F.id}" style="flex:1">Flock out</button>
+        </div>`;
+    }
+    return `<div class="card"><div style="font-weight:700;font-size:19px">${F.name} <span class="pill">${F.houses} houses</span></div>
+      <div class="row"><div><label>Placement date</label><input type="date" data-placed="${F.id}" value="${fl.placed || ""}"></div>
+      <div><label>Flock #</label><input data-no="${F.id}" value="${esc(fl.no || "")}" placeholder="e.g. 23"></div></div>
+      <div style="margin-top:8px">${body || `<div class="meta" style="color:var(--dim);font-size:14px">No flock in. Set the placement date when chicks are coming.</div>`}</div></div>`;
+  }).join("");
+}
+function onFlockClick(e){
+  const cb = e.target.closest("input[type=checkbox][data-t]");
+  if (cb){ const f = cb.dataset.f, t = tasks.find(x => x.id === cb.dataset.t); if (!t) return;
+    if (cb.checked) done[dKey(f,t)] = true; else delete done[dKey(f,t)];
+    saveDone(); renderFlock(); renderFlockToday(); return; }
+  const ics = e.target.closest("[data-ics]"); if (ics) return exportIcs(ics.dataset.ics);
+  const end = e.target.closest("[data-end]"); if (end){
+    const f = end.dataset.end, F = FARMS.find(x => x.id === f);
+    modal(`<div style="font-weight:700;font-size:17px">${F.name}: flock out?</div><p style="color:var(--dim)">Clears the placement date so reminders stop. Ticked tasks for this flock stay saved. Delete the old tasks from your phone calendar by hand if you added them.</p>
+      <button class="primary" id="yesEnd" style="width:100%">Flock is out</button>
+      <button class="ghost" style="width:100%;margin-top:8px" onclick="document.getElementById('modal').style.display='none'">Cancel</button>`);
+    $("yesEnd").onclick = () => { delete flocks[f]; saveFlocks(); $("modal").style.display="none"; renderFlock(); renderFlockToday(); };
+  }
+}
+function onFlockChange(e){
+  const p = e.target.closest("[data-placed]"), n = e.target.closest("[data-no]");
+  if (p){ const f = p.dataset.placed;
+    if (p.value){ flocks[f] = {...(flocks[f]||{}), placed: p.value}; toast("Placement saved. Tap Add to calendar for alarms."); }
+    else delete flocks[f];
+    saveFlocks(); renderFlock(); renderFlockToday(); }
+  if (n){ const f = n.dataset.no; if (!flocks[f]) return toast("Set the placement date first"); flocks[f].no = n.value.trim(); saveFlocks(); }
+}
+function icsEsc(s){ return String(s).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\n/g,"\\n"); }
+function exportIcs(f){
+  const F = FARMS.find(x => x.id === f), fl = flocks[f], p = parseYmd(fl.placed), stamp = new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z";
+  const ev = [];
+  for (const t of farmTasks(f)){
+    const d = addDays(p, t.day), ds = ymd(d).replace(/-/g,"");
+    ev.push(["BEGIN:VEVENT", `UID:barnsense-${f}-${fl.placed}-${t.id}@barnsense`, `DTSTAMP:${stamp}`,
+      `DTSTART:${ds}T060000`, `DTEND:${ds}T061500`,
+      `SUMMARY:${icsEsc(`${f} day ${t.day}: ${t.text.split(/[.:(]/)[0].slice(0,60)}`)}`,
+      `DESCRIPTION:${icsEsc(`${F.name}${fl.no ? " flock "+fl.no : ""}, day ${t.day} (placed ${fl.placed}).\n${t.text}`)}`,
+      "BEGIN:VALARM","ACTION:DISPLAY",`DESCRIPTION:${icsEsc(t.text.slice(0,80))}`,"TRIGGER:PT0M","END:VALARM","END:VEVENT"].join("\r\n"));
+  }
+  const ics = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//BarnSense//Flock reminders//EN","CALSCALE:GREGORIAN", ...ev, "END:VCALENDAR"].join("\r\n");
+  const fname = `${f}-flock-${fl.no || fl.placed}-reminders.ics`, file = new File([ics], fname, {type:"text/calendar"});
+  if (navigator.canShare && navigator.canShare({files:[file]})) navigator.share({files:[file], title: fname}).catch(()=>{});
+  else { try{ const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = fname; a.click(); toast("Calendar file saved; open it to add the tasks"); }catch(e){ csvFallback(ics); } }
+}
+function openFlock(){ $("listView").style.display="none"; $("flockView").style.display="block"; renderFlock(); window.scrollTo(0,0); }
+function closeFlock(){ $("flockView").style.display="none"; $("listView").style.display="block"; renderList(); }
+function editTasks(){
+  const rows = tasks.slice().sort((a,b)=>a.day-b.day).map(t => `<div class="task" style="grid-template-columns:1fr auto">
+    <div><div class="when">Day ${t.day} · ${t.farms.join(", ")}</div><div class="txt">${esc(t.text)}</div></div>
+    <button class="ghost" data-del="${esc(t.id)}" style="color:var(--bad)">✕</button></div>`).join("");
+  modal(`<div style="font-weight:700;font-size:17px">Tasks</div>
+    <div class="row"><div><label>Day (0 = placement)</label><input id="ntDay" type="number" inputmode="numeric"></div><div></div></div>
+    <label>Task</label><input id="ntText" placeholder="What to do">
+    <div class="chips">${FARMS.map(F => `<label><input type="checkbox" class="ntF" value="${F.id}" checked>${F.id}</label>`).join("")}</div>
+    <button class="primary" id="ntAdd" style="width:100%;margin-top:10px">Add task</button>
+    <div style="margin-top:14px">${rows}</div>
+    <button class="ghost" id="ntReset" style="width:100%;margin-top:10px">Put back the starting list</button>
+    <button class="ghost" style="width:100%" onclick="document.getElementById('modal').style.display='none'">Close</button>`);
+  $("ntAdd").onclick = () => {
+    const day = parseInt($("ntDay").value, 10), text = $("ntText").value.trim(), farms = [...document.querySelectorAll(".ntF:checked")].map(x => x.value);
+    if (isNaN(day) || !text || !farms.length) return toast("Fill in day, task and at least one farm");
+    tasks.push({id:"u"+Date.now(), day, farms, text}); saveTasks(); editTasks(); renderFlockToday();
+  };
+  $("sheet").querySelectorAll("[data-del]").forEach(b => b.onclick = () => { tasks = tasks.filter(t => t.id !== b.dataset.del); saveTasks(); editTasks(); renderFlockToday(); });
+  $("ntReset").onclick = () => { tasks = DEFAULT_TASKS.map(t => ({...t})); saveTasks(); editTasks(); renderFlockToday(); };
+}
+function notifyDue(){
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const key = "bs.notified." + ymd(todayD()); if (store.get(key, false)) return;
+  const n = activeFarms().reduce((s, F) => s + dueNow(F.id).length, 0);
+  if (n){ try{ new Notification("BarnSense: tasks due", {body: activeFarms().map(F => `${F.id} day ${flockDay(F.id)}: ${dueNow(F.id).length} task(s)`).join(" · ")}); store.set(key, true); }catch(e){} }
+}
+
+// ---------- notes (typed or spoken), saved by day and sent to Drive "Daily Notes" ----------
+let notes = store.get("bs.notes", []);   // [{id, at, date, farm, houses, day, text}]
+const saveNotes = () => store.set("bs.notes", notes);
+const FARM_NAME = {CC:"CC", GB:"GB", DS:"DS"};
+function noteLabel(n){ return (n.farm ? n.farm + (n.houses ? " H" + n.houses : "") : "All farms" + (n.houses ? " H" + n.houses : "")) + (n.day != null ? ` (day ${n.day})` : ""); }
+function dayFile(date){
+  const list = notes.filter(n => n.date === date).sort((a,b) => a.at - b.at);
+  const lines = [`# Notes ${date} (from the BarnSense app)`, ""];
+  for (const n of list) lines.push(`- ${new Date(n.at).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})} · ${noteLabel(n)}: ${n.text.replace(/\s+/g, " ").trim()}`);
+  if (!list.length) lines.push("(no notes left for this day)");
+  return lines.join("\n") + "\n";
+}
+function sendDay(date){ upQueue("notes", `Notes ${date}.md`, "text/markdown", new TextEncoder().encode(dayFile(date)), true); }
+function renderNotes(){
+  const byDate = {};
+  for (const n of notes) (byDate[n.date] = byDate[n.date] || []).push(n);
+  const dates = Object.keys(byDate).sort().reverse().slice(0, 30);
+  $("notesList").innerHTML = dates.length ? dates.map(d => `<div class="card"><div style="font-weight:600">${shortDate(parseYmd(d))}</div>` +
+    byDate[d].sort((a,b) => b.at - a.at).map(n => `<div class="task" style="grid-template-columns:1fr auto"><div><div class="when">${new Date(n.at).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})} · ${esc(noteLabel(n))}</div><div class="txt">${esc(n.text)}</div></div><button class="ghost" data-ndel="${n.id}" style="color:var(--bad)">✕</button></div>`).join("") + `</div>`).join("")
+    : `<div class="empty">No notes yet.</div>`;
+}
+function openNotes(){ $("listView").style.display="none"; $("notesView").style.display="block"; renderNotes(); window.scrollTo(0,0); setTimeout(() => $("nText").focus(), 50); }
+function closeNotes(){ stopMic(); $("notesView").style.display="none"; $("listView").style.display="block"; renderList(); }
+$("nSave").onclick = () => {
+  stopMic();
+  const text = $("nText").value.trim(); if (!text) return toast("Type or say a note first");
+  const farm = $("nFarm").value, houses = $("nHouse").value.replace(/[^\d,\- ]/g, "").trim(), now = new Date(), date = ymd(now);
+  const day = farm && flocks[farm]?.placed ? flockDay(farm) : null;
+  notes.push({ id: "n" + now.getTime(), at: now.getTime(), date, farm, houses, day, text }); saveNotes();
+  $("nText").value = ""; renderNotes(); sendDay(date);
+  toast(upCfg().url ? "Saved · sending to Drive" : "Saved on this phone");
+};
+$("notesList").addEventListener("click", e => { const b = e.target.closest("[data-ndel]"); if (!b) return;
+  const n = notes.find(x => x.id === b.dataset.ndel); if (!n) return;
+  modal(`<div style="font-weight:700;font-size:17px">Delete this note?</div><p style="color:var(--dim)">${esc(n.text)}</p>
+    <button id="yesNdel" style="width:100%;background:var(--bad);color:#fff">Delete</button>
+    <button class="ghost" style="width:100%;margin-top:8px" onclick="document.getElementById('modal').style.display='none'">Cancel</button>`);
+  $("yesNdel").onclick = () => { notes = notes.filter(x => x.id !== n.id); saveNotes(); $("modal").style.display="none"; renderNotes(); sendDay(n.date); };
+});
+// voice: the browser's speech-to-text when it has it; otherwise the keyboard's own mic works in the box
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+function stopMic(){ if (rec){ try{ rec.stop(); }catch(e){} rec = null; $("nMic").textContent = "🎤 Talk"; } }
+if (!SR){ $("nMic").style.display = "none"; $("nMicHint").innerHTML = "To talk instead of type, tap the box, then the 🎤 on your keyboard."; }
+$("nMic").onclick = () => {
+  if (rec) return stopMic();
+  rec = new SR(); rec.continuous = true; rec.interimResults = false; rec.lang = "en-US";
+  rec.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal){
+    const t = e.results[i][0].transcript.trim(), box = $("nText"); box.value = (box.value ? box.value.replace(/\s*$/, " ") : "") + t; } };
+  rec.onerror = e => { toast(e.error === "not-allowed" ? "Allow the microphone to talk notes" : "Mic stopped: " + e.error); stopMic(); };
+  rec.onend = () => { if (rec) stopMic(); };
+  try{ rec.start(); $("nMic").textContent = "⏹ Stop"; toast("Listening… talk, then tap Stop"); }catch(e){ stopMic(); }
+};
+
+// ---------- settings ----------
+function renderSettings(){
+  [...$("unitTabs").children].forEach(b => b.classList.toggle("on", (b.dataset.u === "F") === unitF));
+  const ids = Object.keys(sensors).sort((a,b)=> sensors[a].name.localeCompare(sensors[b].name, undefined, {numeric:true}));
+  $("setSensors").innerHTML = ids.length ? ids.map(id => { const s = sensors[id];
+    return `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span>${esc(s.name)}</span><span style="color:var(--dim);font-size:13px">${s.batt!=null ? "🔋 "+s.batt+"% · " : ""}synced ${ago(s.lastSync)}</span></div>`; }).join("")
+    : `<div class="meta" style="color:var(--dim);font-size:14px">No sensors added yet.</div>`;
+  const bd = store.get("bs.boards", {}), names = Object.keys(bd).sort();
+  $("setBoards").innerHTML = names.length ? names.map(n => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span>${esc(n)}</span><span style="color:var(--dim);font-size:13px">last connected ${ago(bd[n]/1000)}</span></div>`).join("")
+    : `<div class="meta" style="color:var(--dim);font-size:14px">No boards added yet.</div>`;
+  upStatus();
+}
+function openSettings(){ $("listView").style.display="none"; $("settingsView").style.display="block"; renderSettings(); window.scrollTo(0,0); }
+function closeSettings(){ $("settingsView").style.display="none"; $("listView").style.display="block"; renderList(); }
+
+// ---------- wiring ----------
+$("driveBtn").onclick = openDrive;
+$("menuBtn").onclick = () => $("menu").classList.add("open");
+$("menu").addEventListener("click", e => { if (e.target === $("menu") || e.target.closest(".menupanel button")) $("menu").classList.remove("open"); });
+$("menuHome").onclick = () => {};
+$("settingsBtn").onclick = openSettings;
+$("notesBtn").onclick = openNotes;
+$("noteQuickBtn").onclick = openNotes;
+$("notesBackBtn").onclick = closeNotes;
+$("settingsBackBtn").onclick = closeSettings;
+$("addSensorBtn").onclick = () => { closeSettings(); syncNew(); };
+$("addBoardBtn").onclick = () => { closeSettings(); openLink(); linkConnect(); };
+$("flockBtn").onclick = openFlock;
+$("flockBackBtn").onclick = closeFlock;
+$("flockFarms").addEventListener("click", onFlockClick);
+$("flockFarms").addEventListener("change", onFlockChange);
+$("flockToday").addEventListener("click", onFlockClick);
+$("editTasksBtn").onclick = editTasks;
+$("notifBtn").onclick = () => {
+  if (!("Notification" in window)) return toast("This browser can't show notices");
+  Notification.requestPermission().then(p => { toast(p === "granted" ? "On: you'll get a notice when you open the app" : "Notices are off in this browser"); notifyDue(); });
+};
+$("syncBtn").onclick = syncNew;
+$("dSyncBtn").onclick = () => {
+  if (!btAvailable()) return showBtHelp();
+  if (conn && conn.id === curId){ conn.device.gatt.disconnect(); }
+  // Web Bluetooth needs a fresh user pick each time on iOS browsers
+  syncNew();
+};
+$("disconnectBtn").onclick = () => { if (conn) conn.device.gatt.disconnect(); };
+$("backBtn").onclick = closeDetail;
+$("unitTabs").onclick = e => { const b = e.target.closest("button"); if (!b) return; unitF = b.dataset.u === "F"; store.set("bs.unitF", unitF); renderSettings(); };
+$("rangeTabs").onclick = e => { const b = e.target.closest("button"); if (!b) return;
+  [...$("rangeTabs").children].forEach(x=>x.classList.toggle("on", x===b)); rangeH = +b.dataset.h; drawChart(); };
+$("saveBtn").onclick = () => {
+  const s = sensors[curId];
+  s.name = $("fName").value.trim() || s.devName;
+  s.tLo = uToC(parseFloat($("fTlo").value)); s.tHi = uToC(parseFloat($("fThi").value));
+  s.hLo = parseFloat($("fHlo").value); s.hHi = parseFloat($("fHhi").value);
+  const iv = +$("fInt").value; if (iv !== s.interval) s.pendingInterval = iv;
+  saveSensors(); renderDetail(); toast(s.pendingInterval ? "Saved — interval goes to sensor on next sync" : "Saved");
+};
+$("csvBtn").onclick = exportCsv;
+$("delBtn").onclick = () => {
+  modal(`<div style="font-weight:700;font-size:17px">Remove ${esc(sensors[curId].name)}?</div><p style="color:var(--dim)">This deletes its history from this phone. The sensor keeps its own recent readings.</p>
+    <button id="yesDel" style="width:100%;background:var(--bad);color:#fff">Remove</button>
+    <button class="ghost" style="width:100%;margin-top:8px" onclick="document.getElementById('modal').style.display='none'">Cancel</button>`);
+  $("yesDel").onclick = () => { try{ localStorage.removeItem("bs.h."+curId); }catch(e){} delete sensors[curId]; saveSensors(); $("modal").style.display="none"; closeDetail(); };
+};
+window.addEventListener("resize", () => curId && drawChart());
+
+if (!btAvailable()){
+  $("btNotice").innerHTML = `<div class="notice">To connect to sensors on iPhone, open this page in the free <b>Bluefy</b> browser app. <a href="#" id="helpLink">How / demo</a></div>`;
+  $("helpLink").onclick = e => { e.preventDefault(); showBtHelp(); };
+}
+renderList();
+notifyDue();
+upStatus(); upFlush(); renderBanner(); fetchAlerts();
+setInterval(() => { if (!curId && $("listView").style.display !== "none") renderList(); }, 60000);
+if (location.hostname === "localhost") window.__bs = { parseLinkStatus, renderLinkStatus, openLink };   // test hook, local only
+})();
+</script>
+</body>
+</html>
